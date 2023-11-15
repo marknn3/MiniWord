@@ -63,7 +63,7 @@ namespace MiniSoftware
                             .Cast<Match>().GroupBy(x => x.Value).Select(varGroup => varGroup.First().Value)).ToArray();
                         if (matchs.Length > 0)
                         {
-                            var listKeys = matchs.Select(s => s.Split('.')[0]).Distinct().ToArray();
+                            var listKeys = matchs.Select(s => s.Substring(0, s.LastIndexOf('.'))).Distinct().ToArray();
                             // TODO:
                             // not support > 2 list in same tr
                             if (listKeys.Length > 2)
@@ -71,7 +71,6 @@ namespace MiniSoftware
                             var listKey = listKeys[0];
                             if (tags.ContainsKey(listKey) && tags[listKey] is IEnumerable)
                             {
-                                var attributeKey = matchs[0].Split('.')[0];
                                 var list = tags[listKey] as IEnumerable;
 
                                 foreach (Dictionary<string, object> es in list)
