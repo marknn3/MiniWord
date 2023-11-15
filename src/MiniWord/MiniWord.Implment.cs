@@ -41,6 +41,7 @@ namespace MiniSoftware
             }
             stream.Write(bytes, 0, bytes.Length);
         }
+        
         private static void Generate(this OpenXmlElement xmlElement, WordprocessingDocument docx, Dictionary<string, object> tags)
         {
             // avoid {{tag}} like <t>{</t><t>{</t> 
@@ -57,10 +58,15 @@ namespace MiniSoftware
 
                     foreach (var tr in trs)
                     {
-                        var innerText = tr.InnerText.Replace("{{foreach", "").Replace("endforeach}}", "")
-                            .Replace("{{if(", "").Replace(")if", "").Replace("endif}}", "");
-                        var matchs = (Regex.Matches(innerText, "(?<={{).*?\\..*?(?=}})")
-                            .Cast<Match>().GroupBy(x => x.Value).Select(varGroup => varGroup.First().Value)).ToArray();
+                        var innerText = tr.InnerText
+                            .Replace("{{foreach", "")
+                            .Replace("endforeach}}", "")
+                            .Replace("{{if(", "")
+                            .Replace("}}else{{", "")
+                            .Replace(")if", "")
+                            .Replace("endif}}", "");
+                        var matchs = Regex.Matches(innerText, @"(?<={{).+?\..+?(?=}})").Cast<Match>()
+                            .GroupBy(x => x.Value).Select(varGroup => varGroup.First().Value).ToArray();
                         if (matchs.Length > 0)
                         {
                             var listKeys = matchs.Select(s => s.Substring(0, s.LastIndexOf('.'))).Distinct().ToArray();
@@ -85,7 +91,6 @@ namespace MiniSoftware
                                     }
                                     
                                     ReplaceStatements(newTr, tags: dic);
-                                    
                                     ReplaceText(newTr, docx, tags: dic);
                                     table.Append(newTr);
                                 }
@@ -500,8 +505,9 @@ namespace MiniSoftware
 
             while (paragraphs.Any(s => s.InnerText.Contains("@if")))
             {
-                var ifIndex = paragraphs.FindIndex(0, s => s.InnerText.Contains("@if"));
-                var endIfFinalIndex = paragraphs.FindIndex(ifIndex, s => s.InnerText.Contains("@endif"));
+                int ifIndex = paragraphs.FindLastIndex(s => s.InnerText.Contains("@if"));
+                int elseIndex = paragraphs.FindIndex(0, s => s.InnerText.Contains("@else"));
+                int endifIndex = paragraphs.FindIndex(ifIndex, s => s.InnerText.Contains("@endif"));
 
                 var statement = paragraphs[ifIndex].InnerText.Split(' ');
 
@@ -509,16 +515,40 @@ namespace MiniSoftware
 
                 var checkStatement = statement.Length == 4 ? EvaluateStatement(tagValue.ToString(), statement[2], statement[3]) : !bool.Parse(tagValue.ToString());
 
-                if (!checkStatement)
+                if (checkStatement == true)
                 {
-                    for (int i = ifIndex + 1; i <= endIfFinalIndex - 1; i++)
+                    // Else present
+                    if (elseIndex != -1 && elseIndex < endifIndex)
                     {
-                        paragraphs[i].Remove();
+                        paragraphs[elseIndex].Remove();
+                        for (int i = elseIndex + 1; i <= endifIndex - 1; i++)
+                        {
+                            paragraphs[i].Remove();
+                        }
+                    }
+                }
+                else
+                {
+                    // Else present
+                    if (elseIndex != -1 && elseIndex < endifIndex)
+                    {
+                        for (int i = ifIndex + 1; i <= elseIndex - 1; i++)
+                        {
+                            paragraphs[i].Remove();
+                        }
+                        paragraphs[elseIndex].Remove();
+                    }
+                    else
+                    {
+                        for (int i = ifIndex + 1; i <= endifIndex - 1; i++)
+                        {
+                            paragraphs[i].Remove();
+                        }
                     }
                 }
 
                 paragraphs[ifIndex].Remove();
-                paragraphs[endIfFinalIndex].Remove();
+                paragraphs[endifIndex].Remove();
 
                 paragraphs = xmlElement.Descendants<Paragraph>().ToList();
             }
@@ -528,27 +558,46 @@ namespace MiniSoftware
         {
             const string ifStartTag = "{{if(";
             const string ifEndTag = ")if";
+            const string elseTag = "}}else{{";
             const string endIfTag = "endif}}";
-            
-            while (text.Contains(ifStartTag)) 
-            {
-                var ifIndex = text.IndexOf(ifStartTag, StringComparison.Ordinal);
-                var ifEndIndex = text.IndexOf(")if", ifIndex, StringComparison.Ordinal);
-                            
-                var statement = text.Substring(ifIndex + ifStartTag.Length, ifEndIndex - (ifIndex + ifStartTag.Length)).Split(',');
-                            
-                var checkStatement = EvaluateStatement(statement[0], statement[1], statement[2]);
 
-                if (checkStatement)
+            while (text.Contains(ifStartTag))
+            {
+                int ifIndex = text.LastIndexOf(ifStartTag, StringComparison.Ordinal);
+                int ifEndIndex = text.IndexOf(ifEndTag, ifIndex, StringComparison.Ordinal);
+
+                string[] statement = text.Substring(ifIndex + ifStartTag.Length, ifEndIndex - (ifIndex + ifStartTag.Length)).Split(',');
+
+                bool checkStatement = EvaluateStatement(statement[0], statement[1], statement[2]);
+
+                if (checkStatement == true)
                 {
                     text = text.Remove(ifIndex, ifEndIndex - ifIndex + ifEndTag.Length);
-                    var endIfFinalIndex = text.IndexOf(endIfTag, StringComparison.Ordinal);
-                    text = text.Remove(endIfFinalIndex, endIfTag.Length);
+                    int elseIndex = text.IndexOf(elseTag, ifIndex, StringComparison.Ordinal);
+                    int endIfFinalIndex = text.IndexOf(endIfTag, ifIndex, StringComparison.Ordinal);
+                    if (elseIndex != -1 && elseIndex < endIfFinalIndex)
+                    {
+                        text = text.Remove(elseIndex, endIfFinalIndex - elseIndex + endIfTag.Length);
+                    }
+                    else
+                    {
+                        text = text.Remove(endIfFinalIndex, endIfTag.Length);
+                    }
                 }
                 else
                 {
-                    var endIfFinalIndex = text.IndexOf(endIfTag, StringComparison.Ordinal);
-                    text = text.Remove(ifIndex, endIfFinalIndex - ifIndex + endIfTag.Length);
+                    int elseIndex = text.IndexOf(elseTag, ifEndIndex, StringComparison.Ordinal);
+                    int endIfFinalIndex = text.IndexOf(endIfTag, ifEndIndex, StringComparison.Ordinal);
+                    if (elseIndex != -1 && elseIndex < endIfFinalIndex)
+                    {
+                        int count = elseIndex - ifIndex + elseTag.Length;
+                        text = text.Remove(ifIndex, count);
+                        text = text.Remove(endIfFinalIndex - count, endIfTag.Length);
+                    }
+                    else
+                    {
+                        text = text.Remove(ifIndex, endIfFinalIndex - ifIndex + endIfTag.Length);
+                    }
                 }
             }
 

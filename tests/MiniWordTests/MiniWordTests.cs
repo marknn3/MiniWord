@@ -267,5 +267,118 @@ namespace MiniWordTests
             Assert.Contains(@"Discussion requirement part1", xml);
             Assert.Contains("Air way to the Airplane | Hotel way to the Room", xml);
         }
+
+        [Fact]
+        public void TestForeachLoopInTablesWithIfElseStatement()
+        {
+            var path = PathHelper.GetTempFilePath();
+            var templatePath = PathHelper.GetFile("TestForeachInTablesWithIfElseStatementDemo.docx");
+            var value = new Dictionary<string, object>()
+            {
+                ["TripHs"] = new List<Dictionary<string, object>>
+                {
+                    new Dictionary<string, object>
+                    {
+                        { "sDate", DateTime.Parse("2022-09-08 08:30:00") },
+                        { "eDate", DateTime.Parse("2022-09-08 15:00:00") },
+                        { "How", "Discussion requirement part1" },
+                        {
+                            "Details", new List<MiniWordForeach>()
+                            {
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Air"},
+                                        {"Value", "Airplane"}
+                                    },
+                                    Separator = " | "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Parking"},
+                                        {"Value", "Car"}
+                                    },
+                                    Separator = " / "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Hotel"},
+                                        {"Value", "Room"}
+                                    },
+                                    Separator = ", "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Food"},
+                                        {"Value", "Plate"}
+                                    },
+                                    Separator = ""
+                                }
+                            }
+                        }
+                    },
+                    new Dictionary<string, object>
+                    {
+                        { "sDate", DateTime.Parse("2022-09-09 08:30:00") },
+                        { "eDate", DateTime.Parse("2022-09-09 17:00:00") },
+                        { "How", "Discussion requirement part2 and development" },
+                        {
+                            "Details", new List<MiniWordForeach>()
+                            {
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Air"},
+                                        {"Value", "Airplane"}
+                                    },
+                                    Separator = " | "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Parking"},
+                                        {"Value", "Car"}
+                                    },
+                                    Separator = " / "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Hotel"},
+                                        {"Value", "Room"}
+                                    },
+                                    Separator = ", "
+                                },
+                                new MiniWordForeach()
+                                {
+                                    Value = new Dictionary<string, object>()
+                                    {
+                                        {"Text", "Food"},
+                                        {"Value", "Plate"}
+                                    },
+                                    Separator = ""
+                                }
+                            }
+                        }
+                    }
+                }
+            };
+            MiniWord.SaveAsByTemplate(path, templatePath, value);
+            //System.Diagnostics.Process.Start("explorer.exe", path);
+            var xml = Helpers.GetZipFileContent(path, "word/document.xml");
+            Assert.Contains(@"Discussion requirement part2 and development", xml);
+            Assert.Contains(@"Discussion requirement part1", xml);
+            Assert.Contains("Air way to the Airplane | Hotel way to the Room", xml);
+        }
     }
 }
