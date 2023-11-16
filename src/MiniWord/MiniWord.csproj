@@ -22,6 +22,7 @@
 		<PackageIcon>icon.png</PackageIcon>
 		<PackageReleaseNotes>Please Check [Release Notes](https://github.com/mini-software/MiniWord/tree/main/release-note)</PackageReleaseNotes>
 		<RepositoryType>Github</RepositoryType>
+		<LangVersion>Latest</LangVersion>
 	</PropertyGroup>
 	<ItemGroup>
 		<None Update="icon.png">

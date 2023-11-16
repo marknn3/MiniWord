@@ -1,10 +1,9 @@
-namespace MiniSoftware.Utility
+namespace MiniSoftware.Utility;
+
+public enum TargetFrameType
 {
-    public enum TargetFrameType
-    {
-        Blank,
-        Self,
-        Parent,
-        Top
-    }
+    Blank,
+    Self,
+    Parent,
+    Top
 }
