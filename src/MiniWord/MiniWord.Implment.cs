@@ -121,12 +121,30 @@ public static partial class MiniWord
         var pool = new List<Text>();
         var sb = new StringBuilder();
         var needAppend = false;
-        foreach (var text in texts)
+        for (int i = 0; i < texts.Count; i++)
         {
+            Text text = texts[i];
             var clear = false;
-            if (text.InnerText.StartsWith("{"))
+            if (!needAppend)
             {
-                needAppend = true;
+                if (text.InnerText.StartsWith("{{"))
+                {
+                    needAppend = true;
+                }
+                else if ((i + 1 < texts.Count && text.InnerText.EndsWith("{") && texts[i + 1].InnerText.StartsWith("{"))
+                      || (text.InnerText.Contains("{{")))
+                {
+                    int pos = text.InnerText.IndexOf("{");
+                    if (pos > 0)
+                    {
+                        // Split text to always start with {{
+                        var newText = text.Clone() as Text;
+                        newText.Text = text.InnerText.Substring(0, pos);
+                        text.Text = text.InnerText.Substring(pos);
+                        text.Parent.InsertBefore(newChild: newText, text);
+                    }
+                    needAppend = true;
+                }
             }
             if (needAppend)
             {
@@ -145,10 +163,8 @@ public static partial class MiniWord
                 const string tagStart = "{{";
                 const string tagEnd = "}}";
 
-                var foreachTagContains = s.Split(new[] { foreachTag }, StringSplitOptions.None).Length - 1 ==
-                                         s.Split(new[] { endForeachTag }, StringSplitOptions.None).Length - 1;
-                var ifTagContains = s.Split(new[] { ifTag }, StringSplitOptions.None).Length - 1 ==
-                                    s.Split(new[] { endifTag }, StringSplitOptions.None).Length - 1;
+                var foreachTagContains = s.Count(foreachTag) == s.Count(endForeachTag);
+                var ifTagContains = s.Count(ifTag) == s.Count(endifTag);
                 var tagContains = s.StartsWith(tagStart) && s.Contains(tagEnd);
 
                 if (foreachTagContains && ifTagContains && tagContains)
