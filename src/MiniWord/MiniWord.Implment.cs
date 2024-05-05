@@ -10,9 +10,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
-using A = DocumentFormat.OpenXml.Drawing;
-using DW = DocumentFormat.OpenXml.Drawing.Wordprocessing;
-using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 
 namespace MiniSoftware;
 
@@ -20,7 +17,7 @@ public static partial class MiniWord
 {
     private static void SaveAsByTemplateImpl(Stream stream, byte[] template, Dictionary<string, object> data)
     {
-        var value = data; //TODO: support dynamic and poco value
+        var value = data;
         byte[] bytes = null;
         using (var ms = new MemoryStream())
         {
@@ -71,16 +68,17 @@ public static partial class MiniWord
                 {
                     var innerText = tr.InnerText
                         .Replace("{{foreach", "")
-                        .Replace("endforeach}}", "")
+                        .Replace("endforeach}}", "")    
                         .Replace("{{if(", "")
                         .Replace("}}else{{", "")
                         .Replace(")if", "")
                         .Replace("endif}}", "");
-                    var matchs = Regex.Matches(innerText, @"(?<={{).+?\..+?(?=}})").Cast<Match>()
-                        .GroupBy(x => x.Value).Select(varGroup => varGroup.First().Value).ToArray();
-                    if (matchs.Length > 0)
+                    var matches = Regex.Matches(innerText, @"(?<={{).+?\..+?(?=}})")
+                        .Cast<Match>().GroupBy(x => x.Value)
+                        .Select(varGroup => varGroup.First().Value).ToArray();
+                    if (matches.Length > 0)
                     {
-                        var listKeys = matchs.Select(s => s.Substring(0, s.LastIndexOf('.'))).Distinct().ToArray();
+                        var listKeys = matches.Select(s => s.Substring(0, s.LastIndexOf('.'))).Distinct().ToArray();
                         // TODO:
                         // not support > 2 list in same tr
                         if (listKeys.Length > 2)
@@ -105,7 +103,17 @@ public static partial class MiniWord
 
                                 ReplaceStatements(newTr, tags: dic);
                                 ReplaceText(newTr, docx, tags: dic);
-                                table.Append(newTr);
+
+                                //Fix #47 The table should be inserted at the template tag position instead of the last row
+                                if (table.Contains(tr))
+                                {
+                                    table.InsertBefore(newTr, tr);
+                                }
+                                else
+                                {
+                                    // If it is a nested table, temporarily append it to the end according to the original plan.
+                                    table.Append(newTr);
+                                }
                             }
                             tr.Remove();
                         }
@@ -193,46 +201,46 @@ public static partial class MiniWord
         }
     }
 
-    private static void AvoidSplitTagText(OpenXmlElement xmlElement, IEnumerable<string> txt)
-    {
-        foreach (var paragraph in xmlElement.Descendants<Paragraph>())
-        {
-            foreach (var continuousString in paragraph.GetContinuousString())
-            {
-                foreach (var text in txt.Where(o => continuousString.Item1.Contains(o)))
-                {
-                    continuousString.Item3.TrimStringToInContinuousString(text);
-                }
-            }
-        }
-    }
+    //private static void AvoidSplitTagText(OpenXmlElement xmlElement, IEnumerable<string> txt)
+    //{
+    //    foreach (var paragraph in xmlElement.Descendants<Paragraph>())
+    //    {
+    //        foreach (var continuousString in paragraph.GetContinuousString())
+    //        {
+    //            foreach (var text in txt.Where(o => continuousString.Item1.Contains(o)))
+    //            {
+    //                continuousString.Item3.TrimStringToInContinuousString(text);
+    //            }
+    //        }
+    //    }
+    //}
 
-    private static List<string> GetReplaceKeys(Dictionary<string, object> tags)
-    {
-        var keys = new List<string>();
-        foreach (var item in tags)
-        {
-            if (item.Value.IsStrongTypeEnumerable())
-            {
-                foreach (var item2 in (IEnumerable)item.Value)
-                {
-                    if (item2 is Dictionary<string, object> dic)
-                    {
-                        foreach (var item3 in dic.Keys)
-                        {
-                            keys.Add("{{" + item.Key + "." + item3 + "}}");
-                        }
-                    }
-                    break;
-                }
-            }
-            else
-            {
-                keys.Add("{{" + item.Key + "}}");
-            }
-        }
-        return keys;
-    }
+    //private static List<string> GetReplaceKeys(Dictionary<string, object> tags)
+    //{
+    //    var keys = new List<string>();
+    //    foreach (var item in tags)
+    //    {
+    //        if (item.Value.IsStrongTypeEnumerable())
+    //        {
+    //            foreach (var item2 in (IEnumerable)item.Value)
+    //            {
+    //                if (item2 is Dictionary<string, object> dic)
+    //                {
+    //                    foreach (var item3 in dic.Keys)
+    //                    {
+    //                        keys.Add("{{" + item.Key + "." + item3 + "}}");
+    //                    }
+    //                }
+    //                break;
+    //            }
+    //        }
+    //        else
+    //        {
+    //            keys.Add("{{" + item.Key + "}}");
+    //        }
+    //    }
+    //    return keys;
+    //}
 
     private static bool EvaluateStatement(string tagValue, string comparisonOperator, string value)
     {
@@ -246,9 +254,11 @@ public static partial class MiniWord
                 switch (comparisonOperator)
                 {
                     case "==":
+                    case "=":
                         checkStatement = dtg.Equals(doubleNumber);
                         break;
                     case "!=":
+                    case "<>":
                         checkStatement = !dtg.Equals(doubleNumber);
                         break;
                     case ">":
@@ -270,9 +280,11 @@ public static partial class MiniWord
                 switch (comparisonOperator)
                 {
                     case "==":
+                    case "=":
                         checkStatement = itg.Equals(intNumber);
                         break;
                     case "!=":
+                    case "<>":
                         checkStatement = !itg.Equals(intNumber);
                         break;
                     case ">":
@@ -294,9 +306,11 @@ public static partial class MiniWord
                 switch (comparisonOperator)
                 {
                     case "==":
+                    case "=":
                         checkStatement = dttg.Equals(date);
                         break;
                     case "!=":
+                    case "<>":
                         checkStatement = !dttg.Equals(date);
                         break;
                     case ">":
@@ -318,9 +332,11 @@ public static partial class MiniWord
                 switch (comparisonOperator)
                 {
                     case "==":
+                    case "=":
                         checkStatement = stg == value;
                         break;
                     case "!=":
+                    case "<>":
                         checkStatement = stg != value;
                         break;
                 }
@@ -330,9 +346,11 @@ public static partial class MiniWord
                 switch (comparisonOperator)
                 {
                     case "==":
+                    case "=":
                         checkStatement = btg != boolean;
                         break;
                     case "!=":
+                    case "<>":
                         checkStatement = btg == boolean;
                         break;
                 }
@@ -363,23 +381,19 @@ public static partial class MiniWord
     private static void ReplaceText(OpenXmlElement xmlElement, WordprocessingDocument docx, Dictionary<string, object> tags)
     {
         var paragraphs = xmlElement.Descendants<Paragraph>().ToArray();
-        foreach (var p in paragraphs)
+        foreach (Paragraph p in paragraphs)
         {
             var runs = p.Descendants<Run>().ToArray();
 
-            foreach (var run in runs)
+            foreach (Run run in runs)
             {
                 var texts = run.Descendants<Text>().ToArray();
-                if (texts.Length == 0)
-                {
-                    continue;
-                }
 
-                foreach (Text t in texts)
+                foreach (Text text in texts)
                 {
                     foreach (var tag in tags)
                     {
-                        var isMatch = t.Text.Contains($"{{{{{tag.Key}}}}}");
+                        var isMatch = text.Text.Contains("{{" + tag.Key + "}}");
 
                         if (!isMatch && tag.Value is List<MiniWordForeach> forTags)
                         {
@@ -387,7 +401,7 @@ public static partial class MiniWord
                                 dictKey =>
                                 {
                                     var innerTag = "{{" + tag.Key + "." + dictKey + "}}";
-                                    return t.Text.Contains(innerTag);
+                                    return text.Text.Contains(innerTag);
                                 })))
                             {
                                 isMatch = true;
@@ -396,15 +410,16 @@ public static partial class MiniWord
 
                         if (isMatch)
                         {
-                            if (tag.Value is string[] || tag.Value is IList<string> || tag.Value is List<string>)
+                            //if (tag.Value is string[] || tag.Value is IList<string> || tag.Value is List<string>)
+                            if (tag.Value is IList<string>)
                             {
                                 var vs = tag.Value as IEnumerable;
-                                var currentT = t;
+                                var currentT = text;
                                 var isFirst = true;
-                                foreach (var v in vs)
+                                foreach (object v in vs)
                                 {
-                                    var newT = t.CloneNode(true) as Text;
-                                    newT.Text = t.Text.Replace($"{{{{{tag.Key}}}}}", v?.ToString());
+                                    var newT = text.CloneNode(true) as Text;
+                                    newT.Text = text.Text.Replace("{{" + tag.Key + "}}", v?.ToString());
                                     if (isFirst)
                                     {
                                         isFirst = false;
@@ -417,18 +432,19 @@ public static partial class MiniWord
                                     run.Append(newT);
                                     currentT = newT;
                                 }
-                                t.Remove();
+                                text.Remove();
                             }
+
                             else if (tag.Value is List<MiniWordForeach> vs)
                             {
-                                var currentT = t;
+                                var currentT = text;
                                 var generatedText = new Text();
-                                currentT.Text = currentT.Text.Replace(@"{{foreach", "").Replace(@"endforeach}}", "");
+                                currentT.Text = currentT.Text.Replace("{{foreach", "").Replace("endforeach}}", "");
 
                                 var newTexts = new Dictionary<int, string>();
                                 for (var i = 0; i < vs.Count; i++)
                                 {
-                                    var newT = t.CloneNode(true) as Text;
+                                    var newT = text.CloneNode(true) as Text;
 
                                     foreach (var vv in vs[i].Value)
                                     {
@@ -455,48 +471,37 @@ public static partial class MiniWord
                                 }
 
                                 run.Append(generatedText);
-                                t.Remove();
+                                text.Remove();
                             }
-                            else if (tag.Value is MiniWordPicture)
-                            {
-                                var pic = (MiniWordPicture)tag.Value;
-                                byte[] l_Data = null;
-                                if (pic.Path != null)
-                                {
-                                    l_Data = File.ReadAllBytes(pic.Path);
-                                }
-                                if (pic.Bytes != null)
-                                {
-                                    l_Data = pic.Bytes;
-                                }
 
-                                var mainPart = docx.MainDocumentPart;
+                            else if (tag.Value is IMiniWordComponent value)
+                            {
+                                value.Execute(docx, run, value);
+                                text.Remove();
+                            }
 
-                                var imagePart = mainPart.AddImagePart(pic.GetImagePartType);
-                                using (var stream = new MemoryStream(l_Data))
+                            else if (tag.Value is IList<IMiniWordComponentList> valueList)
+                            {
+                                var firstValue = valueList.FirstOrDefault();
+                                if (firstValue != null)
                                 {
-                                    imagePart.FeedData(stream);
-                                    AddPicture(run, mainPart.GetIdOfPart(imagePart), pic);
-
+                                    if (valueList.Any(value => value.GetType() != firstValue.GetType()))
+                                    {
+                                        throw new NotSupportedException("MiniWord doesn't support covarient lists");
+                                    }
+                                    //if (valueList.Any(value => !(value is IMiniWordComponent)))
+                                    //{
+                                    //    throw new NotSupportedException("MiniWord doesn't support covarient lists");
+                                    //}
+                                    var list = tag.Value as IList<IMiniWordComponent>;
+                                    firstValue?.Execute(docx, run, list);
                                 }
-                                t.Remove();
+                                text.Remove();
                             }
-                            else if (IsHyperLink(tag.Value))
-                            {
-                                AddHyperLink(docx, run, tag.Value);
-                                t.Remove();
-                            }
-                            else if (tag.Value is MiniWordColorText || tag.Value is MiniWordColorText[])
-                            {
-                                var colorText = tag.Value is MiniWordColorText
-                                    ? AddColorText(new[] { (MiniWordColorText)tag.Value })
-                                    : AddColorText((MiniWordColorText[])tag.Value);
-                                run.Append(colorText);
-                                t.Remove();
-                            }
+
                             else
                             {
-                                var newText = string.Empty;
+                                string newText;
                                 if (tag.Value is DateTime)
                                 {
                                     newText = ((DateTime)tag.Value).ToString("yyyy-MM-dd HH:mm:ss");
@@ -506,24 +511,24 @@ public static partial class MiniWord
                                     newText = tag.Value?.ToString();
                                 }
 
-                                t.Text = t.Text.Replace($"{{{{{tag.Key}}}}}", newText);
+                                text.Text = text.Text.Replace("{{" + tag.Key + "}}", newText);
                             }
                         }
-                    }
+                    } // foreach (var tag in tags)
 
-                    t.Text = EvaluateIfStatement(t.Text);
+                    text.Text = EvaluateIfStatement(text.Text);
 
                     // add breakline
                     {
-                        var newText = t.Text;
-                        var splits = Regex.Split(newText, "(<[a-zA-Z/].*?>|\n)");
-                        var currentT = t;
+                        var newText = text.Text;
+                        var splits = Regex.Split(newText, "(?:<[a-zA-Z/].*?>|\n)");
+                        var currentT = text;
                         var isFirst = true;
                         if (splits.Length > 1)
                         {
                             foreach (var v in splits)
                             {
-                                var newT = t.CloneNode(true) as Text;
+                                var newT = text.CloneNode(true) as Text;
                                 newT.Text = v?.ToString();
                                 if (isFirst)
                                 {
@@ -536,12 +541,12 @@ public static partial class MiniWord
                                 run.Append(newT);
                                 currentT = newT;
                             }
-                            t.Remove();
+                            text.Remove();
                         }
                     }
-                }
-            }
-        }
+                } // foreach (Text text in texts)
+            } // foreach (Run run in runs)
+        } // foreach (Paragraph p in paragraphs)
     }
 
     private static void ReplaceStatements(OpenXmlElement xmlElement, Dictionary<string, object> tags)
@@ -649,134 +654,6 @@ public static partial class MiniWord
         return text;
     }
 
-    private static bool IsHyperLink(object value)
-    {
-        return value is MiniWordHyperLink || value is IEnumerable<MiniWordHyperLink>;
-    }
-
-    private static void AddHyperLink(WordprocessingDocument docx, Run run, object value)
-    {
-        List<MiniWordHyperLink> links = new List<MiniWordHyperLink>();
-
-        if (value is MiniWordHyperLink)
-        {
-            links.Add((MiniWordHyperLink)value);
-        }
-        else
-        {
-            links.AddRange((IEnumerable<MiniWordHyperLink>)value);
-        }
-
-        foreach (var linkInfo in links)
-        {
-            var mainPart = docx.MainDocumentPart;
-            var hyperlink = GetHyperLink(mainPart, linkInfo);
-            run.Append(hyperlink);
-            run.Append(new Break());
-        }
-    }
-
-    private static Hyperlink GetHyperLink(MainDocumentPart mainPart, MiniWordHyperLink linkInfo)
-    {
-        var hr = mainPart.AddHyperlinkRelationship(new Uri(linkInfo.Url), true);
-        Hyperlink xmlHyperLink = new Hyperlink(
-            new RunProperties(
-                new RunStyle { Val = "Hyperlink", },
-                new Underline { Val = linkInfo.UnderLineValue },
-                new Color { ThemeColor = ThemeColorValues.Hyperlink }),
-                new Text(linkInfo.Text)
-            )
-        {
-            DocLocation = linkInfo.Url,
-            Id = hr.Id,
-            TargetFrame = linkInfo.GetTargetFrame()
-        };
-        return xmlHyperLink;
-    }
-
-    private static RunProperties AddColorText(MiniWordColorText[] miniWordColorTextArray)
-    {
-        RunProperties runPro = new RunProperties();
-        foreach (var miniWordColorText in miniWordColorTextArray)
-        {
-            Text text = new Text(miniWordColorText.Text);
-            Color color = new Color() { Val = miniWordColorText.FontColor?.Replace("#", "") };
-            Shading shading = new Shading() { Fill = miniWordColorText.HighlightColor?.Replace("#", "") };
-            runPro.Append(shading);
-            runPro.Append(color);
-            runPro.Append(text);
-        }
-
-        return runPro;
-    }
-
-    private static void AddPicture(OpenXmlElement appendElement, string relationshipId, MiniWordPicture pic)
-    {
-        // Define the reference of the image.
-        var element =
-             new Drawing(
-                 new DW.Inline(
-                     new DW.Extent() { Cx = pic.Cx, Cy = pic.Cy },
-                     new DW.EffectExtent()
-                     {
-                         LeftEdge = 0L,
-                         TopEdge = 0L,
-                         RightEdge = 0L,
-                         BottomEdge = 0L
-                     },
-                     new DW.DocProperties()
-                     {
-                         Id = (UInt32Value)1U,
-                         Name = $"Picture {Guid.NewGuid().ToString()}"
-                     },
-                     new DW.NonVisualGraphicFrameDrawingProperties(
-                         new A.GraphicFrameLocks() { NoChangeAspect = true }),
-                     new A.Graphic(
-                         new A.GraphicData(
-                             new PIC.Picture(
-                                 new PIC.NonVisualPictureProperties(
-                                     new PIC.NonVisualDrawingProperties()
-                                     {
-                                         Id = (UInt32Value)0U,
-                                         Name = $"Image {Guid.NewGuid().ToString()}.{pic.Extension}"
-                                     },
-                                     new PIC.NonVisualPictureDrawingProperties()),
-                                 new PIC.BlipFill(
-                                     new A.Blip(
-                                         new A.BlipExtensionList(
-                                             new A.BlipExtension()
-                                             {
-                                                 Uri =
-                                                    $"{{{Guid.NewGuid().ToString("n")}}}"
-                                             })
-                                     )
-                                     {
-                                         Embed = relationshipId,
-                                         CompressionState =
-                                         A.BlipCompressionValues.Print
-                                     },
-                                     new A.Stretch(
-                                         new A.FillRectangle())),
-                                 new PIC.ShapeProperties(
-                                     new A.Transform2D(
-                                         new A.Offset() { X = 0L, Y = 0L },
-                                         new A.Extents() { Cx = pic.Cx, Cy = pic.Cy }),
-                                     new A.PresetGeometry(
-                                         new A.AdjustValueList()
-                                     )
-                                     { Preset = A.ShapeTypeValues.Rectangle }))
-                         )
-                         { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" })
-                 )
-                 {
-                     DistanceFromTop = (UInt32Value)0U,
-                     DistanceFromBottom = (UInt32Value)0U,
-                     DistanceFromLeft = (UInt32Value)0U,
-                     DistanceFromRight = (UInt32Value)0U,
-                     EditId = "50D07946"
-                 });
-        appendElement.Append((element));
-    }
 
     private static byte[] GetBytes(string path)
     {

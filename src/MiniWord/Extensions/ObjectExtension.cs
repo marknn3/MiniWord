@@ -27,68 +27,71 @@ internal static class ObjectExtension
         {
             throw new Exception("The parameter cannot be a collection type");
         }
-        else
+
+        Dictionary<string, object> result = new Dictionary<string, object>();
+        PropertyDescriptorCollection props = TypeDescriptor.GetProperties(value);
+        foreach (PropertyDescriptor prop in props)
         {
-            Dictionary<string, object> reuslt = new Dictionary<string, object>();
-            PropertyDescriptorCollection props = TypeDescriptor.GetProperties(value);
-            foreach (PropertyDescriptor prop in props)
+            object propValue = prop.GetValue(value);
+
+            if (IsStrongTypeEnumerable(propValue))
             {
-                object val1 = prop.GetValue(value);
-
-                if (IsStrongTypeEnumerable(val1))
+                bool isValueList = false;
+                List<Dictionary<string, object>> sx = new List<Dictionary<string, object>>();
+                foreach (object val1item in (IEnumerable)propValue)
                 {
-                    var isValueOrStringType = false;
-                    List<Dictionary<string, object>> sx = new List<Dictionary<string, object>>();
-                    foreach (object val1item in (IEnumerable)val1)
+                    if (val1item == null)
                     {
-                        if (val1item == null)
-                        {
-                            sx.Add(new Dictionary<string, object>());
-                            continue;
-                        }
-                        // not custom type
-                        if (val1item is string || val1item is DateTime || value.GetType().IsValueType)
-                        {
-                            isValueOrStringType = true;
-                            reuslt.Add(prop.Name, val1);
-                            break;
-                        }
-                        if (val1item is Dictionary<string, object> dicStr)
-                        {
-                            sx.Add(dicStr);
-                            continue;
-                        }
-                        else if (val1item is ExpandoObject)
-                        {
-                            sx.Add(new Dictionary<string, object>(value as ExpandoObject));
-                            continue;
-                        }
+                        sx.Add(new Dictionary<string, object>());
+                        continue;
+                    }
+                    if (val1item is Dictionary<string, object> dicStr)
+                    {
+                        sx.Add(dicStr);
+                        continue;
+                    }
+                    if (val1item is ExpandoObject)
+                    {
+                        sx.Add(new Dictionary<string, object>(val1item as ExpandoObject));
+                        continue;
+                    }
 
-                        PropertyDescriptorCollection props2 = TypeDescriptor.GetProperties(val1item);
-                        Dictionary<string, object> reuslt2 = new Dictionary<string, object>();
-                        foreach (PropertyDescriptor prop2 in props2)
-                        {
-                            object val2 = prop2.GetValue(val1item);
-                            reuslt2.Add(prop2.Name, val2);
-                        }
-                        sx.Add(reuslt2);
-                    }
-                    if (!isValueOrStringType)
+                    // When any value is a primitive type, then add list as-is
+                    if (val1item is string || val1item.GetType().IsValueType)
                     {
-                        reuslt.Add(prop.Name, sx);
+                        isValueList = true;
+                        result.Add(prop.Name, propValue);
+                        break;
                     }
+
+                    PropertyDescriptorCollection props2 = TypeDescriptor.GetProperties(val1item);
+                    Dictionary<string, object> result2 = new Dictionary<string, object>();
+                    foreach (PropertyDescriptor prop2 in props2)
+                    {
+                        object val2 = prop2.GetValue(val1item);
+                        result2.Add(prop2.Name, val2);
+                    }
+                    sx.Add(result2);
                 }
-                else
+                if (!isValueList)
                 {
-                    reuslt.Add(prop.Name, val1);
+                    result.Add(prop.Name, sx);
                 }
             }
-            return reuslt;
+            else
+            {
+                result.Add(prop.Name, propValue);
+            }
         }
+        return result;
     }
 
     internal static bool IsStrongTypeEnumerable(this object obj)
     {
-        return obj is IEnumerable && !(obj is string) && !(obj is char[]) && !(obj is string[]) && !(obj is MiniWordColorText[]);
+        return obj is IEnumerable
+            && obj is not string
+            && obj is not char[]
+            && obj is not string[]
+            && obj is not IList<IMiniWordComponentList>;
     }
 }

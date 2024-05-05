@@ -11,8 +11,8 @@ namespace MiniWordTests
     {
         internal static string GetZipFileContent(string zipPath, string filePath)
         {
-            var ns = new XmlNamespaceManager(new NameTable());
-            ns.AddNamespace("x", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
+            //var ns = new XmlNamespaceManager(new NameTable());
+            //ns.AddNamespace("x", "http://schemas.openxmlformats.org/spreadsheetml/2006/main");
             using (var stream = File.OpenRead(zipPath))
             using (ZipArchive archive = new ZipArchive(stream, ZipArchiveMode.Read, false, Encoding.UTF8))
             {
